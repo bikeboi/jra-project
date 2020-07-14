@@ -2,3 +2,5 @@ numpy
 matplotlib
 pyNN
 torch
+torchvision
+jupyter
