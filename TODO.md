@@ -11,7 +11,7 @@
     - [ ] Supervision
     - [ ] Code documentation (not crucial)
 - [ ] Experiment: Half-connected to pattern A, half connected to pattern B
-    - [ ] Planning
+    - [x] Planning
     - [ ] Unsupervised
     - [ ] Supervised
 - [ ] Check sparsity of Omniglot data
