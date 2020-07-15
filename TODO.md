@@ -7,9 +7,9 @@
     - [x] Generalize simulation setup and running
     - [x] More flexible input encoding
     - [x] Utility plotting functions
-    - [ ] Distance metrics
-    - [ ] Supervision API
-    - [ ] Documentation
+    - [x] Distance metrics
+    - [ ] Supervision
+    - [ ] Code documentation (not crucial)
 - [ ] Half-on, half-off experiment
 - [ ] Check sparsity of Omniglot data
 - [ ] Run experiment with supervision (on a subset of characters)
