@@ -10,9 +10,12 @@
     - [x] Distance metrics
     - [ ] Supervision
     - [ ] Code documentation (not crucial)
-- [ ] Half-on, half-off experiment
+- [ ] Experiment: Half-connected to pattern A, half connected to pattern B
+    - [ ] Planning
+    - [ ] Unsupervised
+    - [ ] Supervised
 - [ ] Check sparsity of Omniglot data
-- [ ] Run experiment with supervision (on a subset of characters)
+- [ ] Experiment: Omniglot 
 - [ ] Reconstruct MAT model to better understand it
 
 ### DONE

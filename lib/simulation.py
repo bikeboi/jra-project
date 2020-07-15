@@ -7,7 +7,7 @@ from pyNN.utility import ProgressBar
 from embedding import generate_spike_arrays
 
 # Setup experiment
-def setup_experiment(input_set, params, model_setup, labels=None):
+def setup_experiment(input_set, params, model_setup, labels=None, eKC_signal=False):
     # Setup sim
     sim.setup(params['delta_t'])
     np.random.seed(42) # Magic number ¯\_(ツ)_/¯
@@ -23,7 +23,9 @@ def setup_experiment(input_set, params, model_setup, labels=None):
     # Build Model
     MB = model_setup(input_spikes, **params)
     MB['model'].record(["spikes"])
-    MB['model'].get_population("eKC").record("v")
+
+    if eKC_signal:
+        MB['model'].get_population("eKC").record("v")
 
     return MB, spike_labels, intervals
 
@@ -45,7 +47,7 @@ def run_experiment(MB, intervals, params):
 
 
 # Plotting
-def plot_results(data, title):
+def plot_results(data, title, eKC_signal=False):
     plot_settings = {
         "lines.linewidth": 1.5,
         "lines.markersize": 18,
@@ -57,6 +59,7 @@ def plot_results(data, title):
     panels[-1].options.update({ "xticks": True })
 
     # eKC signal
+    
     panels.append(
         Panel(
             data['eKC'].segments[0].analogsignals[0], 

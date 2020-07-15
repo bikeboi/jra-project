@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.spatial.distance import euclidean
+from scipy.spatial.distance import euclidean, cosine
 
 # Experiment metrics
 
@@ -12,7 +12,7 @@ def interclass(activity, labels, D=euclidean):
         distance = np.mean([ D(v,v_other) for c_other,v_other in class_vectors.items() if c != c_other ])
         D_inter[c] = distance
     
-    return D_inter
+    return np.array([ v for v in D_inter.values() ])
 
 
 def intraclass(activity, labels, D=euclidean):
@@ -25,7 +25,7 @@ def intraclass(activity, labels, D=euclidean):
         distance = np.mean([ D(v, active) for active in class_activity.T ])
         D_intra[c] = distance
     
-    return D_intra
+    return np.array([ v for v in D_intra.values() ])
 
 
 def overlap_distance(activity, labels):
@@ -48,3 +48,9 @@ def calculate_class_vectors(activity, labels, return_class_activity=False):
 
 def per_class_activity(activity, labels):
     return { c: activity[:,labels == c] for c in np.unique(labels) }
+
+
+# Numerically stable cosine distance
+def cosine_distance(a, b):
+    epsilon = np.finfo(np.float32).eps
+    return cosine(a + epsilon, b + epsilon)
