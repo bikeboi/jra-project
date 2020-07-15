@@ -1,7 +1,19 @@
 # TODO
 
 ## Week 2
-- [x] Clean up codebase and push to git repo
+### TODO
+- [ ] Streamline simulation API so that running experiments in notebooks is easier
+    - [ ] Data loading for Omniglot
+    - [x] Generalize simulation setup and running
+    - [x] More flexible input encoding
+    - [x] Utility plotting functions
+    - [ ] Distance metrics
+    - [ ] Supervision API
+    - [ ] Documentation
 - [ ] Half-on, half-off experiment
+- [ ] Check sparsity of Omniglot data
+- [ ] Run experiment with supervision (on a subset of characters)
 - [ ] Reconstruct MAT model to better understand it
-- [ ] Run experiment with supervision (with MNIST)
+
+### DONE
+- [x] Clean up codebase and push to git repo

@@ -1,6 +1,5 @@
 numpy
 matplotlib
 pyNN
-torch
-torchvision
+Pillow
 jupyter

@@ -15,15 +15,12 @@ pip install -r requirements.text
 ```
 
 ### PyNN GeNN
-Clone this repository, GeNN, and pyNN_genn:
+Clone this repository, GeNN, pyNN_genn, and omniglot:
 ```sh
 git clone git@github.com:bikeboi/jra-project.git
-
-# GeNN
 git clone git@github.com:genn-team/genn.git
-
-# pyNN GeNN
 git clone git@github.com:genn-team/pynn_genn.git
+git clone git@github.com:brendenlake/omniglot.git
 ```
 
 Navigate into the `genn` folder and build GeNN and pyGeNN with the following commands:
