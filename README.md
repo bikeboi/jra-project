@@ -15,7 +15,7 @@ pip install -r requirements.text
 ```
 
 ### PyNN GeNN
-Clone this repository, GeNN, pyNN_genn, and omniglot:
+Clone this repository, [GeNN](https://github.com/genn-team/genn), [pyNN_genn](https://github.com/genn-team/pynn_genn), and [omniglot](https://github.com/brendenlake/omniglot):
 ```sh
 git clone git@github.com:bikeboi/jra-project.git
 git clone git@github.com:genn-team/genn.git
