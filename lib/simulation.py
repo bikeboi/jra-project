@@ -7,21 +7,25 @@ from pyNN.utility import ProgressBar
 from embedding import generate_spike_arrays
 
 # Setup experiment
-def setup_experiment(input_set, params, model_setup=lambda mb,i: None):
+def setup_experiment(input_set, params, model_setup, labels=None):
     # Setup sim
     sim.setup(params['delta_t'])
     np.random.seed(42) # Magic number ¯\_(ツ)_/¯
 
     # Input spikes
     intervals = gen_intervals(params['t_snapshot'], params['n_samples'], params['t_snapshot'])
-    input_spikes = generate_spike_arrays(input_set, intervals, params['t_snapshot'], params['snapshot_noise'] if params['snapshot_noise'] else 0.0)
+    input_spikes, spike_labels = generate_spike_arrays(
+        input_set, np.arange(len(input_set)) if labels is None else labels,
+        intervals, 
+        params['t_snapshot'], 
+        params['snapshot_noise'] if params['snapshot_noise'] else 0.0)
 
     # Build Model
     MB = model_setup(input_spikes, **params)
     MB['model'].record(["spikes"])
     MB['model'].get_population("eKC").record("v")
 
-    return MB, intervals
+    return MB, spike_labels, intervals
 
 def run_experiment(MB, intervals, params):
     # Save initial weights
@@ -181,9 +185,9 @@ PARAM_SYN_DEFAULT = lambda rng: ({
 })
 
 PARAM_STDP_DEFAULT = lambda rng: {
-    "weight_dependence": sim.AdditiveWeightDependence(w_min=1.0, w_max=0.125),
+    "weight_dependence": sim.AdditiveWeightDependence(w_min=0.01, w_max=1.0),
     "timing_dependence": sim.SpikePairRule(),
-    "weight": RandomDistribution('normal', (0.125, 0.025), rng=rng),
+    "weight": RandomDistribution('normal', (0.125, 0.2), rng=rng),
     "delay": 10.0
 }
 

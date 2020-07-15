@@ -5,8 +5,9 @@ import matplotlib.pyplot as plt
 import pynn_genn as sim
 from pyNN.random import NumpyRNG, RandomDistribution
 
-from model import default_MB
 import simulation as S
+import metrics
+from model import default_MB
 
 # Use GTK3Agg for "plt.show" functionality
 matplotlib.use("GTK3Agg")
@@ -17,8 +18,8 @@ DELTA_T = 0.01 # ms
 RNG = NumpyRNG(seed=69)
 
 D_INPUT = 10
-N_SAMPLES = 6
-N_EKC = 1
+N_SAMPLES = 20
+N_EKC = 2
 
 
 # Parameters
@@ -31,30 +32,36 @@ PARAMS = S.default_params(
 MODEL_SETUP = default_MB
 
 # Inputs
-"""
-Input Set:
-[
+INPUT_SET = np.array([
     [ 1, 0, 0, 0, 0, 0, 0, 0, 0],
-    [ 0, 0, 0, 1, 0, 0, 0, 0, 0]
-]
-"""
-INPUT_SET = np.zeros((2,D_INPUT))
-INPUT_SET[0,0] = 1
-INPUT_SET[1,3] = 1 
+    [ 0, 0, 0, 1, 0, 0, 0, 0, 0],
+    #[ 0, 0, 1, 0, 0, 0, 0, 0, 0]
+], dtype='float')
 
 
 # Setup simulation
-MB, intervals = S.setup_experiment(INPUT_SET, PARAMS, model_setup=MODEL_SETUP)
+MB, spike_labels, intervals = S.setup_experiment(INPUT_SET, PARAMS, model_setup=MODEL_SETUP)
 
 # Run simulation
 results = S.run_experiment(MB, intervals, PARAMS)
 
-iKC_activity = results['activity']['iKC'][0]
+for pop in ["iKC", "eKC"]:
+    print(pop)
+    activity = results['activity'][pop][0]
+
+    inter = metrics.interclass(activity, spike_labels)
+    intra = metrics.intraclass(activity, spike_labels)
+
+    print("Mean Inter:", np.mean(list(inter.values())))
+    print("Mean Intra:", np.mean(list(intra.values())))
+    print()
+
+print("--")
 
 fig = S.plot_results(results['data'], fr"Results")
 plt.show()
 
-print(iKC_activity)
+print()
 
 # Cleanup
 S.cleanup()

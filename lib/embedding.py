@@ -1,6 +1,6 @@
 import numpy as np
 
-def generate_spike_arrays(input_set, intervals, snapshot_duration=50, noise=0.0):
+def generate_spike_arrays(input_set, labels, intervals, snapshot_duration=50, noise=0.0):
     """
     Generate spike array times from set of binary inputs and spike intervals
 
@@ -26,12 +26,13 @@ def generate_spike_arrays(input_set, intervals, snapshot_duration=50, noise=0.0)
 
     # Select from inputs
     samples = input_set[inputs]
+    sample_labels = labels[inputs]
 
     for inp,i in zip(samples,intervals):
         snapshot = generate_snapshot(i, inp, snapshot_duration, noise=noise)
         arrays.append(snapshot)
     
-    return list(map(to_spike_array, np.concatenate(arrays, axis=1).tolist()))
+    return list(map(to_spike_array, np.concatenate(arrays, axis=1).tolist())), sample_labels
 
 def generate_snapshot(start_time, input, duration=50, noise=0.0):
     snapshot = input * start_time
