@@ -19,7 +19,7 @@ DELTA_T = 0.01 # ms
 RNG = NumpyRNG(seed=69)
 
 D_INPUT = 10
-N_SAMPLES = 100
+N_SAMPLES = 10
 N_EKC = 2
 
 
@@ -61,13 +61,18 @@ def log_distance(t):
 
 
 # Run simulation
-results = S.run_experiment(MB, intervals, PARAMS)
+results = S.run_experiment(MB, intervals, PARAMS, intermediate_logging_step=25)
 
+for res in results:
+    print(res['activity']['PN'])
+
+
+"""
 
 fig = S.plot_results(results['data'], fr"Results")
 plt.show()
 
 print()
-
+"""
 # Cleanup
 S.cleanup()

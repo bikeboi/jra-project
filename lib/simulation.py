@@ -7,18 +7,9 @@ from pyNN.utility import ProgressBar
 from embedding import generate_spike_arrays
 
 # Setup experiment
-def setup_experiment(input_set, params, model_setup, labels=None, eKC_signal=False):
+def setup_experiment(input_spikes, params, model_setup, eKC_signal=False):
     # Setup sim
     sim.setup(params['delta_t'])
-    np.random.seed(42) # Magic number ¯\_(ツ)_/¯
-
-    # Input spikes
-    intervals = gen_intervals(params['t_snapshot'], params['n_samples'], params['t_snapshot'])
-    input_spikes, spike_labels = generate_spike_arrays(
-        input_set, np.arange(len(input_set)) if labels is None else labels,
-        intervals, 
-        params['t_snapshot'], 
-        params['snapshot_noise'] if params['snapshot_noise'] else 0.0)
 
     # Build Model
     MB = model_setup(input_spikes, **params)
@@ -27,47 +18,58 @@ def setup_experiment(input_set, params, model_setup, labels=None, eKC_signal=Fal
     if eKC_signal:
         MB['model'].get_population("eKC").record("v")
 
-    return MB, spike_labels, intervals
+    return MB
 
 def run_experiment(MB, intervals, params):
-    # Save initial weights
-    initial_weights = { name: proj.get('weight', format='array') for name, proj in MB['projections'].items() }
 
-    sim.run(params['steps'])
-    print("Done\n--")
+    # Progress bar
+    pb = ProgressBar()
+    steps = params['steps']
 
-    # Save final weights
-    final_weights = { name: proj.get('weight', format='array') for name, proj in MB['projections'].items() }
+    # Log initial values
+    print("Running experiment\n")
 
-    return  {
-        "data": { pop.label:  pop.get_data() for pop in MB['model'].populations },
-        "activity": { pop.label: [ calculate_activity(seg.spiketrains, intervals) for seg in pop.get_data().segments ] for pop in MB['model'].populations },
-        "weights": { "initial": initial_weights, "final": final_weights }
-    }
+    # No intermediate logging
+    def progbar(t):
+        pb.set_level(t/steps)
+        return t + params['t_snapshot']
+        
+    sim.run(params['steps'], callbacks=[progbar])
+    logs = log_data(MB, intervals, params['t_snapshot'])
+
+    print()
+    print("\nTotal Steps:", f"{steps}ms")
+
+    return logs
 
 
 # Plotting
-def plot_results(data, title, eKC_signal=False):
+def plot_results(data, title, eKC_signal=False, plot_params={}):
     plot_settings = {
-        "lines.linewidth": 1.5,
-        "lines.markersize": 18,
-        "font.size": 14,
+        #"lines.linewidth": 1.5,
+        #"lines.markersize": 18,
+        #"font.size": 14,
         "axes.xmargin": 0
     }
+
+    plot_settings.update(plot_params)
+
+    print("Plotting panels...")
 
     panels = [ Panel(result.segments[0].spiketrains, data_labels=[k], yticks=True) for k,result in data.items()  ]
     panels[-1].options.update({ "xticks": True })
 
     # eKC signal
-    
-    panels.append(
-        Panel(
-            data['eKC'].segments[0].analogsignals[0], 
-            xticks=True, yticks=True, 
-            xlabel="time(ms)", ylabel="membrane potential (mV)",
-        ),
-    )
+    if eKC_signal:
+        panels.append(
+            Panel(
+                data['eKC'].segments[0].analogsignals[0], 
+                xticks=True, yticks=True, 
+                xlabel="time(ms)", ylabel="membrane potential (mV)",
+            ),
+        ) 
 
+    print("Generating Figure...")
     fig = Figure(
         *panels,
         title=title,
@@ -82,10 +84,18 @@ def cleanup():
     sim.end()
 
 # Utility
+
+## Log data
+def log_data(MB, active_intervals, t_snapshot):
+    return {
+        "data": { pop.label:  pop.get_data() for pop in MB['model'].populations },
+        "activity": { pop.label: [ calculate_activity(seg.spiketrains, active_intervals, t_snapshot) for seg in pop.get_data().segments ] for pop in MB['model'].populations },
+        "weights": { name: proj.get('weight', format='array')  for name,proj in MB['projections'].items() }
+    }
+
 ## Activity metric
-def calculate_activity(spiketrains, intervals):
+def calculate_activity(spiketrains, intervals, t_snapshot):
     activity = []
-    t_snapshot = intervals[-1] - intervals[-2] # Derive snapshot from interval difference
     for start_time in intervals:
         activity.append([ len(spiketrain[(start_time <= spiketrain) & (start_time + t_snapshot > spiketrain)]) for spiketrain in spiketrains ])
 

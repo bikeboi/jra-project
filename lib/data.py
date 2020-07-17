@@ -16,48 +16,29 @@ class Dataset:
         raise NotImplementedError
 
 
+class Alphabet(Dataset):
+    def __init__(self, root_dir, id, **params):
+        super().__init__(**params)
 
-class Omniglot(Dataset):
+        name = sorted(os.listdir(root_dir))[id]
+        data_dir = f"{root_dir}/{name}"
+        char_paths = [ f"{data_dir}/{path}" for path in sorted(os.listdir(data_dir)) ]
 
-    def __init__(self, data_dir, train=True, invert=True):
-        self.clamped = [None, None, None]
-        self.invert = invert
+        self.paths = np.array([ np.array([ f"{char_path}/{style_path}" for style_path in sorted(os.listdir(char_path)) ]) for char_path in char_paths ])
 
-        root = data_dir + ("/train" if train else "/test")
-        
-        self.alphabets = sorted(os.listdir(root))
+        # Metadata
+        self.num_chars = len(os.listdir(data_dir))
 
-        # Path lookup table
-        self.lookup_ = { alpha:
-            [
-                [
-                    f"{root}/{alpha}/{char}/{style}" for k,style in enumerate(sorted(os.listdir(f"{root}/{alpha}/{char}")))
-                ]
-                for j,char in enumerate(sorted(os.listdir(f"{root}/{alpha}")))
-            ]
-            for i,alpha in enumerate(sorted(os.listdir(f"{root}")))
-        }
-    
     def __getitem__(self, ix):
-        alphabets = np.atleast_1d(self.alphabets[ix[0]])
+        if type(ix) == type((0,)):
+            char, style = ix
+            image_paths = np.atleast_2d(self.paths[char, style])
+        else:
+            image_paths = np.atleast_2d(self.paths[ix])
 
-        to_slice = lambda x: slice(x,x+1) if type(x) == type(0) else x
-
-        char = to_slice(ix[1]) if len(ix) > 1 else slice(None)
-        style = to_slice(ix[2]) if len(ix) > 2 else slice(None)
-
-        def load_img(path):
-            return np.asarray(Image.open(path), dtype='float')
-
-        paths = [ np.array(self.lookup_[alphabet])[char, style].tolist() for alphabet in alphabets ]
-
-       
-        return [ np.squeeze(np.array([ [ load_img(s) for s in c ] for c in a ])) for a in paths ]
-
-
-ROOT = "experiment_1/data/omniglot"
-
-dataset = Omniglot(ROOT)
-sample = dataset[0,:2,0]
-
-print(sample[0].shape)
+        images = []
+        for char in image_paths:
+            styles = np.array([ np.asarray(Image.open(style_path), dtype=np.float) for style_path in char ])
+            images.append(styles)
+        
+        return np.array(images).squeeze()

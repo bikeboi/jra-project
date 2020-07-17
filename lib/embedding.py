@@ -1,6 +1,6 @@
 import numpy as np
 
-def generate_spike_arrays(input_set, labels, intervals, snapshot_duration=50, noise=0.0):
+def generate_spike_arrays(input_set, classes, intervals, snapshot_duration=50, noise=0.0):
     """
     Generate spike array times from set of binary inputs and spike intervals
 
@@ -12,27 +12,27 @@ def generate_spike_arrays(input_set, labels, intervals, snapshot_duration=50, no
 
     n_inputs = len(input_set)
     n_intervals = len(intervals)
+    n_class = len(classes)
 
     arrays = [ ]
 
-    # Sample all inputs at least once
-    inputs = np.random.choice(n_inputs, n_inputs, replace=False)
+    # Sample each class equally
+    n_per_class = [ len(chunk) for chunk in np.array_split(np.arange(n_intervals), n_class) ]
+    sample_indices = np.concatenate([ [ i for __ in range(n) ] for i,n in enumerate(n_per_class) ])
 
-    # Resample gap between n_interval > n_input
-    n_diff = n_intervals - n_inputs
-    diff = np.random.choice(n_inputs, n_diff, replace=True)
-
-    inputs = np.concatenate([inputs,diff], axis=0)
+    # Jumble them all up
+    np.random.shuffle(sample_indices)
 
     # Select from inputs
-    samples = input_set[inputs]
-    sample_labels = labels[inputs]
+    samples = input_set[sample_indices]
+    sample_labels = classes[sample_indices]
 
     for inp,i in zip(samples,intervals):
         snapshot = generate_snapshot(i, inp, snapshot_duration, noise=noise)
         arrays.append(snapshot)
     
     return list(map(to_spike_array, np.concatenate(arrays, axis=1).tolist())), sample_labels
+
 
 def generate_snapshot(start_time, input, duration=50, noise=0.0):
     snapshot = input * start_time
@@ -57,3 +57,13 @@ def to_spike_array(arr):
             times.append(spike)
     
     return times
+
+"""
+input_set = np.array([
+    [0, 1],
+    [1, 0]
+])
+classes = np.array([0, 1])
+intervals = np.array([50, 100])
+print(generate_spike_arrays(input_set, classes, intervals))
+"""
