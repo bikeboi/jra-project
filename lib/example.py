@@ -8,7 +8,8 @@ from pyNN.random import NumpyRNG, RandomDistribution
 
 import simulation as S
 import metrics
-from model import default_MB
+from model import default_MB, default_params
+from embedding import spike_encode
 
 # Use GTK3Agg for "plt.show" functionality
 matplotlib.use("GTK3Agg")
@@ -22,9 +23,13 @@ D_INPUT = 10
 N_SAMPLES = 10
 N_EKC = 2
 
+# Inputs
+INPUT_SET = np.random.binomial(1, 0.1, (2, N_SAMPLES, D_INPUT))
+spike_coding, spike_labels = spike_encode(INPUT_SET, t_snapshot=T_SNAPSHOT, start_time=T_SNAPSHOT)
+
 
 # Parameters
-PARAMS = S.default_params(
+PARAMS = default_params(
     DELTA_T, T_SNAPSHOT, D_INPUT, N_SAMPLES, N_EKC,
     rng=RNG,
 )
@@ -32,17 +37,9 @@ PARAMS = S.default_params(
 # Model building
 MODEL_SETUP = default_MB
 
-# Inputs
-INPUT_SET = np.array([
-    [ 1, 0, 0, 0, 0, 0, 0, 0, 0],
-    [ 0, 0, 0, 0, 0, 1, 0, 0, 0],
-    [ 0, 0, 1, 0, 0, 0, 0, 0, 0],
-    [ 0, 0, 0, 0, 0, 0, 0, 1, 0]
-], dtype='float')
-
 
 # Setup simulation
-MB, spike_labels, intervals = S.setup_experiment(INPUT_SET, PARAMS, model_setup=MODEL_SETUP)
+MB = S.setup_experiment(spike_coding, model_setup=MODEL_SETUP, **PARAMS)
 
 # Log inter and intraclass
 distance = { "iKC": { "intra": [], "inter": [] } , "eKC": { "intra": [], "inter": [] } } 
@@ -60,19 +57,15 @@ def log_distance(t):
     return t + 10.0
 
 
+intervals = np.arange(T_SNAPSHOT, T_SNAPSHOT * N_SAMPLES, T_SNAPSHOT)
+
 # Run simulation
-results = S.run_experiment(MB, intervals, PARAMS, intermediate_logging_step=25)
-
-for res in results:
-    print(res['activity']['PN'])
-
-
-"""
+results = S.run_experiment(MB, intervals, **PARAMS)
 
 fig = S.plot_results(results['data'], fr"Results")
 plt.show()
 
 print()
-"""
+
 # Cleanup
 S.cleanup()

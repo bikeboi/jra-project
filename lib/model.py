@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import pynn_genn as sim
+from pyNN.random import NumpyRNG
 from pyNN.random import RandomDistribution
 from pyNN.standardmodels import build_translations
 
@@ -10,31 +11,14 @@ def default_MB(inputs, **params):
     p_params = params['population']
 
     pop_PN = build_PN(inputs)
-    pop_iKC = build_population(p_params['n_iKC'], params['neuron'], "iKC")
-    pop_eKC = build_population(p_params['n_eKC'], params['neuron'], "eKC")
+    pop_iKC = build_population(p_params['n_iKC'], p_params['neuron_iKC'], "iKC")
+    pop_eKC = build_population(p_params['n_eKC'], p_params['neuron_eKC'], "eKC")
 
-    # Connections
-    s_params = params['synapse']
+    pop_PN, pop_iKC, pop_eKC = default_populations(inputs, **params['population'])
 
-    ## PNs to iKCs
-    conn_PN_iKC = sim.FixedProbabilityConnector(s_params['p_PN_iKC'], rng=params['rng'])
-    proj_PN_iKC = sim.Projection(
-        pop_PN, pop_iKC,
-        conn_PN_iKC,
-        synapse_type=sim.StaticSynapse(weight=s_params['g_PN_iKC'], delay=s_params['t_PN_iKC']),
-        receptor_type='excitatory',
-        label="PN->iKC"
-    )
-
-    ## iKCs to eKCs
-    conn_iKC_eKC = sim.FixedProbabilityConnector(s_params['p_iKC_eKC'], rng=params['rng'])
-    proj_iKC_eKC = sim.Projection(
-        pop_iKC, pop_eKC,
-        conn_iKC_eKC,
-        synapse_type=sim.STDPMechanism(**params['plasticity'], ),
-        receptor_type='excitatory',
-        label="iKC->eKC"
-    )
+    # Projections
+    proj_PN_iKC = default_proj_PN_iKC(pop_PN, pop_iKC, **params['syn_PN_iKC'])
+    proj_iKC_eKC = default_proj_iKC_eKC(pop_iKC, pop_eKC, **params['syn_iKC_eKC'])
 
     return {
         "model": sim.Assembly(pop_PN, pop_iKC, pop_eKC),
@@ -43,6 +27,37 @@ def default_MB(inputs, **params):
             "iKC_eKC": proj_iKC_eKC
         }
     }
+
+
+def default_populations(input_spikes, **params):
+    PN = build_PN(input_spikes)
+    iKC = build_population(params['n_iKC'], params['neuron_iKC'], "iKC")
+    eKC = build_population(params['n_eKC'], params['neuron_eKC'], "eKC")
+
+    return PN, iKC, eKC
+
+
+def default_proj_PN_iKC(PN, iKC, **params):
+    return sim.Projection(
+        PN, iKC,
+        params['conn'],
+        sim.StaticSynapse(weight=params['g'], delay=params['tau']),
+        label="PN->iKC"
+    )
+
+
+def default_proj_iKC_eKC(iKC, eKC, **params):
+    print(params['WD'])
+    proj = sim.Projection(
+        iKC, eKC,
+        params['conn'],
+        sim.STDPMechanism(
+            timing_dependence=params['TD'],
+            weight_dependence=params['WD'],
+        ),
+        label="iKC->eKC"
+    )
+    return proj
 
 
 def build_PN(spike_times) -> sim.Population:
@@ -59,3 +74,72 @@ def build_population(n, neuron_type, label) -> sim.Population:
     return sim.Population(
         n, neuron_type, label=label
     )
+
+
+
+## Mushroom Body parameters
+def default_params(
+    delta_t, t_snapshot, d_input, n_samples, n_eKC, s_iKC=20, test_frac=0.3, rng=NumpyRNG(),
+    neuron_iKC={}, neuron_eKC={}, syn_PN_iKC={}, syn_iKC_eKC={}
+    ):
+
+    """
+    Generate simulation and model parameters
+    """
+
+    steps = (
+        t_snapshot # Initial pause
+        + t_snapshot * n_samples # Input period 1
+        #+ t_snapshot * 4 # Cooling period
+        #+ t_snapshot * n_samples # Input period 2
+        + t_snapshot # Final pause
+    )
+
+    neuron_iKC = sim.IF_curr_exp() if not neuron_iKC else neuron_iKC
+    neuron_eKC = sim.IF_curr_exp() if not neuron_eKC else neuron_eKC
+
+    PN_iKC = PARAM_PN_iKC(rng)
+    iKC_eKC = PARAM_iKC_eKC(rng)
+
+    PN_iKC.update(syn_PN_iKC)
+    iKC_eKC.update(syn_iKC_eKC)
+
+    return {
+        # Population parameters
+        "population": {
+            "n_iKC": s_iKC * d_input,
+            "n_eKC": n_eKC,
+            "neuron_iKC": neuron_iKC,
+            "neuron_eKC": neuron_eKC
+        },
+
+        # Synapse parameters
+        "syn_PN_iKC": PN_iKC,
+
+        # Plasticity parameters
+        "syn_iKC_eKC": iKC_eKC,
+
+        # Simulation parameters
+        "steps": steps,
+        "delta_t": delta_t,
+        "t_snapshot": t_snapshot,
+        "n_sample": n_samples,
+        "rng": rng,
+        "snapshot_noise": 0.0
+    }
+
+# Defaults
+PARAM_PN_iKC = lambda rng=None: ({
+    "conn": sim.FixedProbabilityConnector(0.15),
+    "g": RandomDistribution('normal', (5.0, 1.25), rng=rng),
+    "tau": 2.0,
+})
+
+PARAM_iKC_eKC = lambda rng=None: ({
+    "conn": sim.AllToAllConnector(),
+    "g": RandomDistribution('normal', (0.125, 0.1), rng=rng),
+    "tau": 10.0,
+
+    "WD": sim.AdditiveWeightDependence(),
+    "TD": sim.SpikePairRule(),
+})
