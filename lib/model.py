@@ -47,16 +47,27 @@ def default_proj_PN_iKC(PN, iKC, **params):
 
 
 def default_proj_iKC_eKC(iKC, eKC, **params):
-    print(params['WD'])
+    conn = [ 
+        ( np.random.randint(0,len(eKC)), np.random.randint(0,len(iKC)), params['g'].next(), params['tau']) for i in range(int(len(eKC) * params['p']))
+    ]
+
+    for c in conn:
+        print(c)
+
     proj = sim.Projection(
         iKC, eKC,
-        params['conn'],
+        sim.FixedProbabilityConnector(params['p']), #sim.FromListConnector(conn, column_names=['weight', 'delay']),
         sim.STDPMechanism(
+            weight=params['g'].next(),
+            delay=params['tau'],
             timing_dependence=params['TD'],
             weight_dependence=params['WD'],
         ),
         label="iKC->eKC"
     )
+
+    print(proj.shape)
+
     return proj
 
 
@@ -130,13 +141,13 @@ def default_params(
 
 # Defaults
 PARAM_PN_iKC = lambda rng=None: ({
-    "conn": sim.FixedProbabilityConnector(0.15),
+    "conn": sim.FixedProbabilityConnector(0.5),
     "g": RandomDistribution('normal', (5.0, 1.25), rng=rng),
     "tau": 2.0,
 })
 
 PARAM_iKC_eKC = lambda rng=None: ({
-    "conn": sim.AllToAllConnector(),
+    "p": 0.2,
     "g": RandomDistribution('normal', (0.125, 0.1), rng=rng),
     "tau": 10.0,
 

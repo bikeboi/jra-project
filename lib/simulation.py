@@ -4,19 +4,16 @@ from pyNN.random import RandomDistribution, NumpyRNG
 from pyNN.utility.plotting import Figure, Panel
 from pyNN.utility import ProgressBar
 
-from model import default_MB
+from .model import default_MB
 
 # Setup experiment
-def setup_experiment(input_spikes, model_setup=default_MB, eKC_signal=False, eKC_conductance=False, **params):
+def setup_experiment(input_spikes, model_setup=default_MB, eKC_signal=False, **params):
     # Setup sim
     sim.setup(params['delta_t'])
 
     # Build Model
     MB = model_setup(input_spikes, **params)
     MB['model'].record(["spikes"])
-
-    if eKC_conductance:
-        MB['model'].get_population('eKC').record('gsyn_exc')
 
     if eKC_signal:
         MB['model'].get_population("eKC").record("v")

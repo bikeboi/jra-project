@@ -3,6 +3,7 @@ from scipy.spatial.distance import euclidean, cosine
 
 # Experiment metrics
 
+# Class Distance Measures
 def interclass(activity, labels, D=euclidean):
     class_vectors = calculate_class_vectors(activity, labels)
 
@@ -50,6 +51,18 @@ def per_class_activity(activity, labels):
     return { c: activity[:,labels == c] for c in np.unique(labels) }
 
 
+# Calculate activity from spiketrains
+def calculate_activity(spiketrains, intervals, t_interval):
+    activity = []
+
+    for train in spiketrains:
+        neuron_activity = [ len(train[(train >= i) & (train < i + t_interval)]) for i in intervals ]
+        activity.append(neuron_activity)
+    
+    return np.array(activity)
+
+
+# Utility functions
 # Numerically stable cosine distance
 def cosine_distance(a, b):
     epsilon = np.finfo(np.float32).eps
