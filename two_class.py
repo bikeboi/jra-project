@@ -1,4 +1,4 @@
-from lib.util import probability_conn_list, ProgBar, WeightLogger, calculate_steps, log_weights_callback, MushroomBody
+from lib.util import probability_conn_list, ProgBar, WeightLogger, calculate_steps, MushroomBody
 from lib.embedding import spike_encode
 from lib.data import Alphabet
 from lib.analysis import calculate_activity
@@ -39,24 +39,31 @@ def get_inputs(n_class, downscale=1):
     return inputs
 
 
-def build_model(input_spikes, n_eKC, rng=None):
+def build_model(input_spikes, n_eKC, delta_t, rng=None):
     # Derived parameters
     n_PN = len(input_spikes)
-    n_iKC = n_PN * 20
+    n_iKC = n_PN * 10
 
     # Synapse parameters
     g_PN_iKC = RandomDistribution('normal', (0.5, 0.05), rng=rng)
     t_PN_iKC = 5.0
 
-    # g_iKC_eKC = RandomDistribution('normal', (0.125, 0.01), rng=rng)
-    t_iKC_iKC = 5.0
+    g_iKC_eKC = RandomDistribution('normal', (1.25, 0.5), rng=rng)
+    t_iKC_eKC = 5.0
 
-    wd = sim.AdditiveWeightDependence(0.3, 1.0)
+    g_sWTA_eKC = RandomDistribution('normal', (0.01, 0.1), rng=rng)
+    t_sWTA_eKC = delta_t
+
+    g_sWTA_iKC = RandomDistribution('normal', (0.01, 0.1), rng=rng)
+    t_sWTA_iKC = delta_t
+
+    wd = sim.AdditiveWeightDependence(0.125, 1.0)
     td = sim.SpikePairRule()
 
     stdp = sim.STDPMechanism(
         timing_dependence=td, weight_dependence=wd,
-        delay=t_iKC_iKC
+        weight=g_iKC_eKC,
+        delay=t_iKC_eKC
     )
 
     # Neuron type
@@ -79,6 +86,7 @@ def build_model(input_spikes, n_eKC, rng=None):
     )
 
     # Projections
+    ## PN -> iKC
     proj_PN_iKC = sim.Projection(
         pop_PN, pop_iKC,
         sim.FixedProbabilityConnector(0.05),  # conn_PN_iKC,
@@ -86,6 +94,7 @@ def build_model(input_spikes, n_eKC, rng=None):
         label="PN_iKC"
     )
 
+    ## iKC -> eKC
     proj_iKC_eKC = sim.Projection(
         pop_iKC, pop_eKC,
         sim.FixedProbabilityConnector(0.05),  # conn_iKC_eKC,
@@ -93,14 +102,44 @@ def build_model(input_spikes, n_eKC, rng=None):
         label="iKC_eKC"
     )
 
+        # Lateral connection matrix
+    lateral_conn_matrix = lambda p: 1 - np.identity(len(p))
+
+    ## sWTA (eKC)
+    proj_sWTA_eKC = sim.Projection(
+        pop_eKC, pop_eKC,
+        sim.ArrayConnector(lateral_conn_matrix(pop_eKC)),
+        sim.StaticSynapse(weight=g_sWTA_eKC, delay=t_sWTA_eKC),
+        receptor_type='inhibitory',
+        label="sWTA_eKC"
+    )
+
+    # sWTA (iKC)
+    pop_iKC_inh = sim.Population(50, neuron, label="iKC_inh")
+
+    proj_iKC_inh = sim.Projection(
+        pop_iKC, pop_iKC_inh,
+        sim.AllToAllConnector(),
+        sim.StaticSynapse(weight=g_sWTA_iKC, delay=delta_t),
+        receptor_type='excitatory',
+    )
+
+    proj_sWTA_iKC = sim.Projection(
+        pop_iKC_inh, pop_iKC,
+        sim.AllToAllConnector(),
+        sim.StaticSynapse(weight=g_sWTA_iKC, delay=t_sWTA_iKC),
+        receptor_type='inhibitory',
+        label="sWTA_iKC"
+    )
+
     return MushroomBody(pop_PN, pop_iKC, pop_eKC, proj_PN_iKC, proj_iKC_eKC)
 
 
-def run(inputs, run_id=0):
+def run(inputs, spike_jitter=0, run_id=0, weight_log_freq=50):
     # Simulation parameters
     delta_t = 0.1
     t_snapshot = 50
-    n_eKC = 100
+    n_eKC = 500
 
     # Derive steps
     steps = calculate_steps(inputs.shape[1], t_snapshot)
@@ -110,10 +149,10 @@ def run(inputs, run_id=0):
     sim.setup(delta_t)
 
     # Input encoding
-    input_spikes, __ = spike_encode(inputs, t_snapshot, t_snapshot)
+    input_spikes, __ = spike_encode(inputs, t_snapshot, t_snapshot, spike_jitter=spike_jitter)
 
     # Build the model
-    model = build_model(input_spikes, n_eKC)
+    model = build_model(input_spikes, n_eKC, delta_t)
 
     model.record({
         "PN": ["spikes"],
@@ -122,7 +161,7 @@ def run(inputs, run_id=0):
     })
 
     # Log sim params to console
-    print(" -- Steps:", steps)
+    print(" -- steps:", steps)
     for name in ["PN", "iKC", "eKC"]:
         print(f" -- n_{name}: {len(model.pop[name])}")
 
@@ -136,11 +175,9 @@ def run(inputs, run_id=0):
     io_iKC = PickleIO(filename=f"results/two_class_{run_id}/iKC.pickle")
     io_eKC = PickleIO(filename=f"results/two_class_{run_id}/eKC.pickle")
 
-    weight_logs = []
-    weight_logger = log_weights_callback(model.proj['PN_iKC'], weight_logs, 10)
-
+    print("Initializing weight logger...")
     weight_logger = WeightLogger(
-        model.proj['iKC_eKC'], 10, f"results/two_class_{run_id}/weights.npy")
+        model.proj['iKC_eKC'], weight_log_freq, f"results/two_class_{run_id}/weights.npy")
     progress_bar = ProgBar(steps)
 
     print("Running simulation..\n")
@@ -153,7 +190,7 @@ def run(inputs, run_id=0):
     )
     print("\n\nDone")
 
-    print("Saving results to disk...")
+    print("Saving results...")
 
     model.pop["PN"].write_data(io_PN)
     model.pop["iKC"].write_data(io_iKC)
@@ -168,6 +205,13 @@ def run(inputs, run_id=0):
         "intervals": np.arange(t_snapshot, inputs.shape[1]*t_snapshot, t_snapshot)
     }
 
+    # Save params to disk
+    print("Saving simulation params...")
+    np.savez(
+        f"results/two_class_{run_id}/params", 
+        steps=steps, t_snapshot=t_snapshot, intervals=np.arange(t_snapshot, inputs.shape[1]*t_snapshot, t_snapshot)
+    )
+
     sim.end()
 
     return sim_params
@@ -176,7 +220,7 @@ def run(inputs, run_id=0):
 # Run the experment
 if __name__ == "__main__":
     args = [int(arg) for arg in sys.argv[1:]]
-    run_id, n_class, downscale = args
+    version, n_class, downscale, jitter = args
     inputs = get_inputs(n_class, downscale)
-    run(inputs, run_id)
+    run(inputs, spike_jitter=jitter, run_id=version)
 

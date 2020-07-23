@@ -1,7 +1,7 @@
 import numpy as np
 from pyNN.parameters import Sequence
 
-def spike_encode(inputs, t_snapshot=50, start_time=0):
+def spike_encode(inputs, t_snapshot=50, start_time=0, spike_jitter=0):
 
     n_per_class = inputs.shape[1]
     n_class = inputs.shape[0]
@@ -21,7 +21,7 @@ def spike_encode(inputs, t_snapshot=50, start_time=0):
     snapshots = []
     for i,pattern in zip(intervals, samples):
         masked = pattern * i
-        snapshot = [ np.array([x - 1]) if x != 0 else np.array([]) for x in masked ]
+        snapshot = [ np.array([x - 1 + np.random.uniform(-spike_jitter,spike_jitter)]) if x != 0 else np.array([]) for x in masked ]
         snapshots.append(snapshot)
     
     # Transpose and eliminate empty

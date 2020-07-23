@@ -9,15 +9,6 @@ def retrieve_results(experiment_name, version=0):
     return {name: PickleIO(f"{prefix}/{name}.pickle").read_block() for name in ["PN", "iKC", "eKC"]}
 
 
-def log_weights_callback(projection, log, freq):
-    def callback(t):
-        weights = projection.get('weight', format='array')
-        log.append(weights)
-        return t + freq
-
-    return callback
-
-
 def calculate_steps(n_input, t_snapshot):
     return (
         t_snapshot  # Initial buffer
@@ -46,6 +37,7 @@ def probability_conn_list(n_pre, n_post, p, *params):
 
 # Mushroom Body container class
 class MushroomBody:
+    """Wrapper class for the MB model"""
 
     def __init__(self, PN, iKC, eKC, PN_iKC, iKC_eKC):
         self.pop = {"PN": PN, "iKC": iKC, "eKC": eKC}
@@ -53,6 +45,11 @@ class MushroomBody:
         self._all = sim.Assembly(PN, iKC, eKC)
 
     def record(self, records):
+        """
+        Record population variables
+
+        :records: Dictionary of key=population, val=array of variables to record
+        """
         for target, variables in records.items():
             self.pop[target].record(variables)
 
@@ -64,28 +61,35 @@ class MushroomBody:
 # Callbacks
 
 class WeightLogger:
-    """Weight Logging
-    """
+    """Weight Logging"""
 
     def __init__(self, projection, log_freq, filepath):
         self.projection = projection
         self.log_freq = log_freq
         self.log = []
         self.filepath = filepath
-    
+
     def __call__(self, t):
+        # Fetch weights
         weights = self.projection.get('weight', format='array')
-        self.log.append(weights)
+
+        # Perform some reductions for optimization
+        weights = weights.flatten()  # Flatten (don't need spatial info)
+        weights = weights[~np.isnan(weights)] # Ignore NaNs
+
+        if len(weights) > 0:
+            self.log.append(weights)
+
         return t + self.log_freq
     
+
     def finalize(self):
         np.save(self.filepath, np.array(self.log))
 
 
 # Progress Bar
 class ProgBar:
-    """Progress Bar class
-    """
+    """Progress Bar"""
 
     def __init__(self, steps, tick_freq=10):
         """
