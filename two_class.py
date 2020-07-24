@@ -49,12 +49,12 @@ def build_model(input_spikes, n_eKC, delta_t, rng=None):
     t_PN_iKC = 5.0
 
     g_iKC_eKC = RandomDistribution('normal', (1.25, 0.5), rng=rng)
-    t_iKC_eKC = 5.0
+    t_iKC_eKC = 10.0
 
-    g_sWTA_eKC = RandomDistribution('normal', (0.01, 0.1), rng=rng)
+    g_sWTA_eKC = 0.05
     t_sWTA_eKC = delta_t
 
-    g_sWTA_iKC = RandomDistribution('normal', (0.01, 0.1), rng=rng)
+    g_sWTA_iKC = 0.05
     t_sWTA_iKC = delta_t
 
     wd = sim.AdditiveWeightDependence(0.125, 1.0)
@@ -135,7 +135,7 @@ def build_model(input_spikes, n_eKC, delta_t, rng=None):
     return MushroomBody(pop_PN, pop_iKC, pop_eKC, proj_PN_iKC, proj_iKC_eKC)
 
 
-def run(inputs, spike_jitter=0, run_id=0, weight_log_freq=50):
+def run(inputs, runs=1, spike_jitter=0, run_id=0, weight_log_freq=50):
     # Simulation parameters
     delta_t = 0.1
     t_snapshot = 50
@@ -149,7 +149,7 @@ def run(inputs, spike_jitter=0, run_id=0, weight_log_freq=50):
     sim.setup(delta_t)
 
     # Input encoding
-    input_spikes, __ = spike_encode(inputs, t_snapshot, t_snapshot, spike_jitter=spike_jitter)
+    input_spikes, labels, samples = spike_encode(inputs, t_snapshot, t_snapshot, spike_jitter=spike_jitter)
 
     # Build the model
     model = build_model(input_spikes, n_eKC, delta_t)
@@ -181,13 +181,16 @@ def run(inputs, spike_jitter=0, run_id=0, weight_log_freq=50):
     progress_bar = ProgBar(steps)
 
     print("Running simulation..\n")
-    sim.run(
-        steps,
-        callbacks=[
-            weight_logger,
-            progress_bar
-        ]
-    )
+    for __ in range(runs):
+        sim.run(
+            steps,
+            callbacks=[
+                weight_logger,
+                progress_bar
+            ]
+        )
+        sim.reset()
+    
     print("\n\nDone")
 
     print("Saving results...")
@@ -202,15 +205,14 @@ def run(inputs, spike_jitter=0, run_id=0, weight_log_freq=50):
     sim_params = {
         "steps": steps,
         "t_snapshot": t_snapshot,
-        "intervals": np.arange(t_snapshot, inputs.shape[1]*t_snapshot, t_snapshot)
+        "intervals": np.arange(t_snapshot, inputs.shape[1]*t_snapshot, t_snapshot),
+        "labels": labels,
+        "samples": samples
     }
 
     # Save params to disk
     print("Saving simulation params...")
-    np.savez(
-        f"results/two_class_{run_id}/params", 
-        steps=steps, t_snapshot=t_snapshot, intervals=np.arange(t_snapshot, inputs.shape[1]*t_snapshot, t_snapshot)
-    )
+    np.savez(f"results/two_class_{run_id}/params", **sim_params)
 
     sim.end()
 

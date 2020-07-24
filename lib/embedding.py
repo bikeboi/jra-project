@@ -28,7 +28,7 @@ def spike_encode(inputs, t_snapshot=50, start_time=0, spike_jitter=0):
     snapshots = np.transpose(np.array(snapshots, dtype='object'))
     snapshots = [Sequence([ s[0] for s in train if len(s) > 0 ]) for train in snapshots ]
     
-    return snapshots, labels
+    return snapshots, labels, samples
 
 """
 input_set = np.array([
