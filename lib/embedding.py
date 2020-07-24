@@ -15,12 +15,22 @@ def spike_encode(inputs, t_snapshot=50, start_time=0, spike_jitter=0):
     
     samples = samples[ixs]
     labels = labels[ixs]
+
+    # Filter out more than 10% spiking neurons
+    inv_k = int(inputs.shape[-1] * 0.95)
     
     # Encode into spike snapshots
     intervals = np.arange(start_time + 1, n_sample * t_snapshot, t_snapshot)
     snapshots = []
     for i,pattern in zip(intervals, samples):
+        # Filter out >0.1 of active signals
+        inv_top_k = np.argsort(pattern)[:inv_k] # Bottom n-k pixels
+        pattern[inv_top_k] = 0.0
+
+        # Set spike time
         masked = pattern * i
+
+        # Generate spike times from mask
         snapshot = [ np.array([x - 1 + np.random.uniform(-spike_jitter,spike_jitter)]) if x != 0 else np.array([]) for x in masked ]
         snapshots.append(snapshot)
     

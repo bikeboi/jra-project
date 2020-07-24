@@ -45,20 +45,20 @@ def build_model(input_spikes, n_eKC, delta_t, rng=None):
     n_PN = len(input_spikes)
     n_iKC = n_PN * 10
 
-    # Synapse parameters
+    # Default synapse parameters
     g_PN_iKC = RandomDistribution('normal', (0.5, 0.1), rng=rng)
     t_PN_iKC = 5.0
 
-    g_iKC_eKC = RandomDistribution('normal', (1.25, 0.5), rng=rng)
-    t_iKC_eKC = 10.0
+    g_iKC_eKC = RandomDistribution('normal', (2.5, 0.5), rng=rng)
+    t_iKC_eKC = 5.0
 
-    g_sWTA_eKC = 0.01
+    g_sWTA_eKC = 0.03
     t_sWTA_eKC = delta_t
 
-    g_sWTA_iKC = 0.05
+    g_sWTA_iKC = 0.025
     t_sWTA_iKC = delta_t
 
-    wd = sim.AdditiveWeightDependence(0.125, 1.0)
+    wd = sim.AdditiveWeightDependence()
     td = sim.SpikePairRule()
 
     stdp = sim.STDPMechanism(
@@ -137,7 +137,18 @@ def build_model(input_spikes, n_eKC, delta_t, rng=None):
     return MushroomBody(pop_PN, pop_iKC, pop_eKC, proj_PN_iKC, proj_iKC_eKC)
 
 
-def run(inputs, runs=1, spike_jitter=0, run_id=0, weight_log_freq=50):
+def initialize_model(mb: MushroomBody, neuron_params, proj_params):
+    # Initialize neuron parameters
+    mb.pop["iKC"].set(**neuron_params)
+    mb.pop["eKC"].set(**neuron_params)
+
+    # Projections
+    ## PN->iKC params
+    mb.proj['PN_iKC'].set(**proj_params['PN_iKC'])
+    mb.proj['iKC_eKC'].initialize(**proj_params['iKC_eKC'])
+
+
+def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_params={}, proj_params={}):
     # Simulation parameters
     delta_t = 0.1
     t_snapshot = 50
@@ -156,6 +167,9 @@ def run(inputs, runs=1, spike_jitter=0, run_id=0, weight_log_freq=50):
     # Build the model
     model = build_model(input_spikes, n_eKC, delta_t)
 
+    if not proj_params:
+        proj_params = { "PN_iKC": {}, "iKC_eKC": {} }
+
     model.record({
         "PN": ["spikes"],
         "iKC": ["spikes"],
@@ -168,22 +182,23 @@ def run(inputs, runs=1, spike_jitter=0, run_id=0, weight_log_freq=50):
         print(f" -- n_{name}: {len(model.pop[name])}")
 
     # Run
-    results_path = f"results/two_class_{run_id}"
+    results_path = f"results/two_class_{version}"
     # Clean out previous results
     shutil.rmtree(results_path, ignore_errors=True)
-    os.makedirs(f"results/two_class_{run_id}")  # Make results directory
+    os.makedirs(f"results/two_class_{version}")  # Make results directory
 
-    io_PN = PickleIO(filename=f"results/two_class_{run_id}/PN.pickle")
-    io_iKC = PickleIO(filename=f"results/two_class_{run_id}/iKC.pickle")
-    io_eKC = PickleIO(filename=f"results/two_class_{run_id}/eKC.pickle")
+    io_PN = PickleIO(filename=f"results/two_class_{version}/PN.pickle")
+    io_iKC = PickleIO(filename=f"results/two_class_{version}/iKC.pickle")
+    io_eKC = PickleIO(filename=f"results/two_class_{version}/eKC.pickle")
 
     print("Initializing weight logger...")
     weight_logger = WeightLogger(
-        model.proj['iKC_eKC'], weight_log_freq, f"results/two_class_{run_id}/weights.npy")
+        model.proj['iKC_eKC'], weight_log_freq, f"results/two_class_{version}/weights.npy")
     progress_bar = ProgBar(steps)
 
     print("Running simulation..\n")
     for __ in range(runs):
+        initialize_model(model, neuron_params, proj_params)
         sim.run(
             steps,
             callbacks=[
@@ -215,7 +230,7 @@ def run(inputs, runs=1, spike_jitter=0, run_id=0, weight_log_freq=50):
 
     # Save params to disk
     print("Saving simulation params...")
-    np.savez(f"results/two_class_{run_id}/params", **sim_params)
+    np.savez(f"results/two_class_{version}/params", **sim_params)
 
     sim.end()
 
@@ -227,5 +242,5 @@ if __name__ == "__main__":
     args = [int(arg) for arg in sys.argv[1:]]
     version, n_class, downscale, jitter = args
     inputs = get_inputs(n_class, downscale)
-    run(inputs, spike_jitter=jitter, run_id=version)
+    run(inputs, spike_jitter=jitter, version=version)
 

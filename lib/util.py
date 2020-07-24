@@ -44,6 +44,9 @@ class MushroomBody:
         self.proj = {"PN_iKC":  PN_iKC, "iKC_eKC": iKC_eKC}
         self._all = sim.Assembly(PN, iKC, eKC)
 
+    def pop_set(self, **params):
+        self._all.set(**params)
+
     def record(self, records):
         """
         Record population variables
@@ -76,13 +79,13 @@ class WeightLogger:
 
         # Perform some reductions for optimization
         weights = weights.flatten()  # Flatten (don't need spatial info)
-        weights = weights[~np.isnan(weights)] # Ignore NaNs
+        weights = weights[~np.isnan(weights)]  # Ignore NaNs
 
         if len(weights) > 0:
             self.buffer.append(weights)
 
         return t + self.log_freq
-    
+
     def reset(self):
         self.log.append(self.buffer)
         self.buffer = []
