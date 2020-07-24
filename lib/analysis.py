@@ -53,13 +53,13 @@ def per_class_activity(activity, labels):
 
 # Calculate activity from spiketrains
 def calculate_activity(spiketrains, intervals, t_interval):
-    activity = []
+    activity = np.empty((len(spiketrains), len(intervals)))
 
-    for train in spiketrains:
-        neuron_activity = [ len(train[(train >= i) & (train < i + t_interval)]) for i in intervals ]
-        activity.append(neuron_activity)
+    for i,t in enumerate(intervals):
+        neuron_activity = np.array([ len(train.time_slice(i, t+t_interval)) for train in spiketrains ])
+        activity[:,i] = neuron_activity
     
-    return np.array(activity)
+    return activity
 
 
 # Utility functions

@@ -1,71 +1,49 @@
 import numpy as np
-from scipy.spatial.distance import cosine
 import matplotlib
 import matplotlib.pyplot as plt
-
 import pynn_genn as sim
-from pyNN.random import NumpyRNG, RandomDistribution
 
-import simulation as S
-import metrics
-from model import default_MB, default_params
-from embedding import spike_encode
+from cells import IF_curr_exp_adapt
+from analysis import calculate_activity
 
-# Use GTK3Agg for "plt.show" functionality
 matplotlib.use("GTK3Agg")
 
-# Constants
-T_SNAPSHOT = 50 # ms
-DELTA_T = 0.01 # ms
-RNG = NumpyRNG(seed=69)
-
-D_INPUT = 10
-N_SAMPLES = 10
-N_EKC = 2
-
-# Inputs
-INPUT_SET = np.random.binomial(1, 0.1, (2, N_SAMPLES, D_INPUT))
-spike_coding, spike_labels = spike_encode(INPUT_SET, t_snapshot=T_SNAPSHOT, start_time=T_SNAPSHOT)
+steps = 1000
+delta_t = 1.0
 
 
-# Parameters
-PARAMS = default_params(
-    DELTA_T, T_SNAPSHOT, D_INPUT, N_SAMPLES, N_EKC,
-    rng=RNG,
-)
+decay_rates = np.linspace(120, 1000, 50)
+firing_rates = []
 
-# Model building
-MODEL_SETUP = default_MB
+for i, rate in enumerate(decay_rates):
+    sim.setup(delta_t)
 
+    pop = sim.Population(1, IF_curr_exp_adapt(tau_threshold=10))
+    pop.record(['v', 'v_thresh_adapt', 'spikes'])
+    current = sim.StepCurrentSource(
+        times=[0, steps-100], amplitudes=[10.0, 0.0])
+    current.inject_into(pop)
 
-# Setup simulation
-MB = S.setup_experiment(spike_coding, model_setup=MODEL_SETUP, **PARAMS)
+    pop.set(tau_threshold=rate)
 
-# Log inter and intraclass
-distance = { "iKC": { "intra": [], "inter": [] } , "eKC": { "intra": [], "inter": [] } } 
+    sim.run(steps)
 
-def log_distance(t):
-    for pop in ["iKC", "eKC"]:
-        activity = results['activity'][pop][0]
+    spikes = pop.get_data('spikes', clear=True).segments[0].spiketrains
 
-        inter = metrics.interclass(activity, spike_labels, D=metrics.cosine_distance)
-        intra = metrics.intraclass(activity, spike_labels, D=metrics.cosine_distance)
+    interval_step = 50
+    intervals = np.arange(0, steps, interval_step)
+    activity = calculate_activity(spikes, intervals, interval_step)[0] / 50
 
-        distance[pop]["inter"] = inter.mean()
-        distance[pop]["intra"] = intra.mean()
-    
-    return t + 10.0
+    firing_rate = np.mean(activity)
+    firing_rates.append(firing_rate)
 
+    sim.end()
 
-intervals = np.arange(T_SNAPSHOT, T_SNAPSHOT * N_SAMPLES, T_SNAPSHOT)
+plt.plot(decay_rates, firing_rates)
+plt.title("Firing rate by threshold decay")
+plt.xlabel("decay rate (ms)")
+plt.ylabel("firing rate (sp/50ms)")
 
-# Run simulation
-results = S.run_experiment(MB, intervals, **PARAMS)
-
-fig = S.plot_results(results['data'], fr"Results")
 plt.show()
 
-print()
-
-# Cleanup
-S.cleanup()
+sim.end()

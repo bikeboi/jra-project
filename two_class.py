@@ -1,4 +1,5 @@
 from lib.util import probability_conn_list, ProgBar, WeightLogger, calculate_steps, MushroomBody
+from lib.cells import IF_curr_exp_adapt
 from lib.embedding import spike_encode
 from lib.data import Alphabet
 from lib.analysis import calculate_activity
@@ -45,13 +46,13 @@ def build_model(input_spikes, n_eKC, delta_t, rng=None):
     n_iKC = n_PN * 10
 
     # Synapse parameters
-    g_PN_iKC = RandomDistribution('normal', (0.5, 0.05), rng=rng)
+    g_PN_iKC = RandomDistribution('normal', (0.5, 0.1), rng=rng)
     t_PN_iKC = 5.0
 
     g_iKC_eKC = RandomDistribution('normal', (1.25, 0.5), rng=rng)
     t_iKC_eKC = 10.0
 
-    g_sWTA_eKC = 0.05
+    g_sWTA_eKC = 0.01
     t_sWTA_eKC = delta_t
 
     g_sWTA_iKC = 0.05
@@ -67,7 +68,8 @@ def build_model(input_spikes, n_eKC, delta_t, rng=None):
     )
 
     # Neuron type
-    neuron = sim.IF_curr_exp()
+    tau_threshold = 425.0 # ms (tuned in ./lib/example.py)
+    neuron = IF_curr_exp_adapt(tau_threshold=tau_threshold)
 
     # Populations
     pop_PN = sim.Population(
@@ -189,6 +191,7 @@ def run(inputs, runs=1, spike_jitter=0, run_id=0, weight_log_freq=50):
                 progress_bar
             ]
         )
+        weight_logger.reset()
         sim.reset()
     
     print("\n\nDone")

@@ -67,6 +67,7 @@ class WeightLogger:
         self.projection = projection
         self.log_freq = log_freq
         self.log = []
+        self.buffer = []
         self.filepath = filepath
 
     def __call__(self, t):
@@ -78,13 +79,17 @@ class WeightLogger:
         weights = weights[~np.isnan(weights)] # Ignore NaNs
 
         if len(weights) > 0:
-            self.log.append(weights)
+            self.buffer.append(weights)
 
         return t + self.log_freq
     
+    def reset(self):
+        self.log.append(self.buffer)
+        self.buffer = []
 
     def finalize(self):
-        np.save(self.filepath, np.array(self.log))
+        np.save(self.filepath, np.array(self.log, dtype='object'))
+        self.log = []
 
 
 # Progress Bar
