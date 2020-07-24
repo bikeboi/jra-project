@@ -27,9 +27,6 @@ def get_inputs(n_class, downscale=1):
     # Downsample
     inputs = inputs[:, :, ::downscale, ::downscale]
 
-    # Binarize
-    inputs = inputs.round()
-
     # Invert
     inputs = 1 - inputs
 

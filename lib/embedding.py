@@ -16,6 +16,9 @@ def spike_encode(inputs, t_snapshot=50, start_time=0, spike_jitter=0):
     samples = samples[ixs]
     labels = labels[ixs]
 
+    # Binarize inputs
+    samples = samples.round()
+
     # Filter out more than 10% spiking neurons
     inv_k = int(inputs.shape[-1] * 0.95)
     
