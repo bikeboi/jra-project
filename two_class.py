@@ -37,36 +37,41 @@ def get_inputs(n_class, downscale=1):
     return inputs
 
 
-def build_model(input_spikes, n_eKC, delta_t, rng=None):
+def build_model(input_spikes, n_eKC, delta_t, neuron_params, syn_params, rng=None):
+
+    print("Building Model")
+
     # Derived parameters
     n_PN = len(input_spikes)
     n_iKC = n_PN * 10
 
     # Default synapse parameters
-    g_PN_iKC = RandomDistribution('normal', (0.5, 0.1), rng=rng)
-    t_PN_iKC = 5.0
+    # RandomDistribution('normal', (0.5, 0.1), rng=rng)
+    g_PN_iKC = syn_params['PN_iKC']['weight']
+    t_PN_iKC = syn_params['PN_iKC']['delay']  # 5.0
 
-    g_iKC_eKC = RandomDistribution('normal', (2.5, 0.5), rng=rng)
-    t_iKC_eKC = 5.0
+    # RandomDistribution('normal', (1.0, 0.5), rng=rng)
+    g_iKC_eKC = syn_params['iKC_eKC']['weight']
+    t_iKC_eKC = syn_params['iKC_eKC']['delay']  # 5.0
 
-    g_sWTA_eKC = 0.05
+    g_sWTA_eKC = syn_params['sWTA_eKC']['weight']
     t_sWTA_eKC = delta_t
 
-    g_sWTA_iKC = 0.025
+    g_sWTA_iKC = syn_params['sWTA_iKC']['weight']
     t_sWTA_iKC = delta_t
 
-    wd = sim.AdditiveWeightDependence()
-    td = sim.SpikePairRule()
-
     stdp = sim.STDPMechanism(
-        timing_dependence=td, weight_dependence=wd,
+        weight_dependence=sim.AdditiveWeightDependence(
+            **syn_params['iKC_eKC']['wd_params']),
+        timing_dependence=sim.SpikePairRule(
+            **syn_params['iKC_eKC']['td_params']),
         weight=g_iKC_eKC,
         delay=t_iKC_eKC
     )
 
     # Neuron type
     tau_threshold = 120.0  # ms (tuned in ./lib/example.py)
-    neuron = IF_curr_exp_adapt(tau_threshold=tau_threshold)
+    neuron = IF_curr_exp_adapt(tau_threshold=tau_threshold, **neuron_params)
 
     # Populations
     pop_PN = sim.Population(
@@ -145,7 +150,7 @@ def initialize_model(mb: MushroomBody, neuron_params, proj_params):
     mb.proj['iKC_eKC'].initialize(**proj_params['iKC_eKC'])
 
 
-def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_params={}, proj_params={}):
+def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_params={}, syn_params={}):
     # Simulation parameters
     delta_t = 0.1
     t_snapshot = 50
@@ -163,10 +168,8 @@ def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_pa
         inputs, t_snapshot, t_snapshot, spike_jitter=spike_jitter)
 
     # Build the model
-    model = build_model(input_spikes, n_eKC, delta_t)
-
-    if not proj_params:
-        proj_params = {"PN_iKC": {}, "iKC_eKC": {}}
+    model = build_model(input_spikes, n_eKC, delta_t,
+                        neuron_params, syn_params)
 
     model.record({
         "PN": ["spikes"],
@@ -196,7 +199,7 @@ def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_pa
 
     print("Running simulation..\n")
     for __ in range(runs):
-        initialize_model(model, neuron_params, proj_params)
+        # initialize_model(model, neuron_params, syn_params)
         sim.run(
             steps,
             callbacks=[
@@ -221,7 +224,7 @@ def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_pa
     sim_params = {
         "steps": steps,
         "t_snapshot": t_snapshot,
-        "intervals": np.arange(t_snapshot, inputs.shape[1]*t_snapshot, t_snapshot),
+        "intervals": np.arange(t_snapshot, inputs.shape[0]*inputs.shape[1]*t_snapshot, t_snapshot),
         "labels": labels,
         "samples": samples
     }
