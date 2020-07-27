@@ -49,7 +49,7 @@ def build_model(input_spikes, n_eKC, delta_t, rng=None):
     g_iKC_eKC = RandomDistribution('normal', (2.5, 0.5), rng=rng)
     t_iKC_eKC = 5.0
 
-    g_sWTA_eKC = 0.03
+    g_sWTA_eKC = 0.05
     t_sWTA_eKC = delta_t
 
     g_sWTA_iKC = 0.025
@@ -65,7 +65,7 @@ def build_model(input_spikes, n_eKC, delta_t, rng=None):
     )
 
     # Neuron type
-    tau_threshold = 425.0 # ms (tuned in ./lib/example.py)
+    tau_threshold = 120.0  # ms (tuned in ./lib/example.py)
     neuron = IF_curr_exp_adapt(tau_threshold=tau_threshold)
 
     # Populations
@@ -85,7 +85,7 @@ def build_model(input_spikes, n_eKC, delta_t, rng=None):
     )
 
     # Projections
-    ## PN -> iKC
+    # PN -> iKC
     proj_PN_iKC = sim.Projection(
         pop_PN, pop_iKC,
         sim.FixedProbabilityConnector(0.05),  # conn_PN_iKC,
@@ -93,7 +93,7 @@ def build_model(input_spikes, n_eKC, delta_t, rng=None):
         label="PN_iKC"
     )
 
-    ## iKC -> eKC
+    # iKC -> eKC
     proj_iKC_eKC = sim.Projection(
         pop_iKC, pop_eKC,
         sim.FixedProbabilityConnector(0.05),  # conn_iKC_eKC,
@@ -101,8 +101,8 @@ def build_model(input_spikes, n_eKC, delta_t, rng=None):
         label="iKC_eKC"
     )
 
-        # Lateral connection matrix
-    lateral_conn_matrix = lambda p: 1 - np.identity(len(p))
+    # Lateral connection matrix
+    def lateral_conn_matrix(p): return 1 - np.identity(len(p))
 
     ## sWTA (eKC)
     proj_sWTA_eKC = sim.Projection(
@@ -140,7 +140,7 @@ def initialize_model(mb: MushroomBody, neuron_params, proj_params):
     mb.pop["eKC"].set(**neuron_params)
 
     # Projections
-    ## PN->iKC params
+    # PN->iKC params
     mb.proj['PN_iKC'].set(**proj_params['PN_iKC'])
     mb.proj['iKC_eKC'].initialize(**proj_params['iKC_eKC'])
 
@@ -159,13 +159,14 @@ def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_pa
     sim.setup(delta_t)
 
     # Input encoding
-    input_spikes, labels, samples = spike_encode(inputs, t_snapshot, t_snapshot, spike_jitter=spike_jitter)
+    input_spikes, labels, samples = spike_encode(
+        inputs, t_snapshot, t_snapshot, spike_jitter=spike_jitter)
 
     # Build the model
     model = build_model(input_spikes, n_eKC, delta_t)
 
     if not proj_params:
-        proj_params = { "PN_iKC": {}, "iKC_eKC": {} }
+        proj_params = {"PN_iKC": {}, "iKC_eKC": {}}
 
     model.record({
         "PN": ["spikes"],
@@ -205,7 +206,7 @@ def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_pa
         )
         weight_logger.reset()
         sim.reset()
-    
+
     print("\n\nDone")
 
     print("Saving results...")
@@ -240,4 +241,3 @@ if __name__ == "__main__":
     version, n_class, downscale, jitter = args
     inputs = get_inputs(n_class, downscale)
     run(inputs, spike_jitter=jitter, version=version)
-
