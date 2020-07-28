@@ -11,28 +11,45 @@ from neo.io import PickleIO
 from pyNN.random import RandomDistribution
 import pynn_genn as sim
 import numpy as np
+import cv2
 
 
 # Get input samples
-def get_inputs(n_class, downscale=1):
+def get_inputs(n_class, downscale=1, remove=False):
 
     # Get n_class character sets from the "Alphabet of the Magi" alphabet
     data_dir = "omniglot/python/images_background"
     dataset = Alphabet(data_dir, 0)
     inputs = dataset[:n_class, :]
 
+    # Invert
+    inputs[:] = (inputs == 0)
+
     # Centering
     # TODO: Write algorithm to center images
+    for c in range(inputs.shape[0]):
+        for s in range(inputs.shape[1]):
+            img = np.asarray(inputs[c, s, :, :])
+            h, w = img.shape
+            whr = np.where(img > 0)
+            cy, cx = np.mean(whr[0]), np.mean(whr[1])
+            Tx = np.asarray([[1, 0, -cx + w/2],[0, 1, -cy + h/2]])
+            img[:] = cv2.warpAffine(img, Tx, (img.shape[1], img.shape[0]))
+            inputs[c, s, :, :] = img
+            
 
     # Downsample
     inputs = inputs[:, :, ::downscale, ::downscale]
-
-    # Invert
-    inputs = 1 - inputs
-
+            
     # Flatten
-    __, c, w, h = inputs.shape
-    inputs = inputs.reshape(-1, c, w * h)
+    _, s, h, w = inputs.shape
+    
+    # Remove half of the active pixels
+    if remove and n_class == 2:
+        inputs[0, :, h//2:, :] = 0 
+        inputs[1, :, :h//2, :] = 0 
+
+    inputs = inputs.reshape(-1, s, w * h)
 
     return inputs
 
