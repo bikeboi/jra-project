@@ -1,19 +1,31 @@
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 import pynn_genn as sim
+import pyqtgraph as pg
 from pyNN.utility import ProgressBar
 from neo.io import PickleIO
 
 
-def retrieve_results(experiment_name, version=0):
+def fetch_results(experiment_name, version):
     prefix = f"results/{experiment_name}_{version}"
     return {name: PickleIO(f"{prefix}/{name}.pickle").read_block() for name in ["PN", "iKC", "eKC"]}
 
 
-def calculate_steps(n_input, t_snapshot):
+def fetch_params(experiment_name, version):
+    path = f"results/{experiment_name}_{version}/params.npz"
+    return np.load(path, allow_pickle=True)
+
+
+def fetch_weights(experiment_name, version):
+    return np.load(f"results/{experiment_name}_{version}/weights.npy")
+
+
+def calculate_steps(n_sample, t_snapshot):
     return (
-        t_snapshot  # Initial buffer
-        + n_input * t_snapshot  # Active period
-        + t_snapshot  # End buffer
+            t_snapshot  # Initial buffer
+            + n_sample * t_snapshot  # Active period
+            + t_snapshot  # End buffer
     )
 
 
@@ -41,7 +53,7 @@ class MushroomBody:
 
     def __init__(self, PN, iKC, eKC, PN_iKC, iKC_eKC):
         self.pop = {"PN": PN, "iKC": iKC, "eKC": eKC}
-        self.proj = {"PN_iKC":  PN_iKC, "iKC_eKC": iKC_eKC}
+        self.proj = {"PN_iKC": PN_iKC, "iKC_eKC": iKC_eKC}
         self._all = sim.Assembly(PN, iKC, eKC)
 
     def pop_set(self, **params):
@@ -69,11 +81,12 @@ class WeightLogger:
     def __init__(self, projection, log_freq, filepath):
         self.projection = projection
         self.log_freq = log_freq
-        self.log = []
         self.buffer = []
         self.filepath = filepath
 
     def __call__(self, t):
+        if t < 1:
+            return t + 1
         # Fetch weights
         weights = self.projection.get('weight', format='array')
 
@@ -81,18 +94,12 @@ class WeightLogger:
         weights = weights.flatten()  # Flatten (don't need spatial info)
         weights = weights[~np.isnan(weights)]  # Ignore NaNs
 
-        if len(weights) > 0:
-            self.buffer.append(weights)
+        self.buffer.append(weights)
 
-        return t + self.log_freq
+        return t + self.log_freq - 1
 
-    def reset(self):
-        self.log.append(self.buffer)
-        self.buffer = []
-
-    def finalize(self):
-        np.save(self.filepath, np.array(self.log, dtype='object'))
-        self.log = []
+    def save(self):
+        np.save(self.filepath, np.array(self.buffer))
 
 
 # Progress Bar
@@ -113,5 +120,40 @@ class ProgBar:
         """
         :t: Current timestep
         """
-        self.bar.set_level(t/self.steps)
+        self.bar.set_level(t / self.steps)
         return t + self.tick_freq
+
+
+class Results:
+    def __init__(self, base_dir, versions):
+        self.base_dir = base_dir
+        prefixes = [f"{self.base_dir}/{version}" for version in versions]
+        self.params = [np.load(f"{prefix}_params.npz") for prefix in prefixes]
+        self.data = [[PickleIO(f"{pref}_{r}") for r in range(p['runs'])] for pref, p in
+                     zip(prefixes, self.params)]
+
+    def get_run(self, ix):
+        ix = np.atleast_1d(np.array(ix))
+        if len(ix) == 1:
+            return self.data[ix[0]]
+        elif len(ix) == 2:
+            vix,rix = ix
+            return self.data[vix][rix]
+
+
+# PLotting
+def plot_rasters(model: sim.Assembly, duration, t_snapshot=10):
+    sns.set_style("white")
+    fig, axs = plt.subplots(3, 1, figsize=(20, 15))
+
+    plt.subplots_adjust(hspace=0.5)
+
+    for ax, pop in zip(axs, model.populations):
+        spiketrains = pop.get_data().segments[0].spiketrains
+        ax.eventplot(spiketrains, colors='k')
+        ax.set_title(pop.label)
+        ax.set_xlabel("step (ms)")
+        ax.set_ylabel("neuron index")
+        ax.set_xlim(left=-t_snapshot, right=duration + t_snapshot)
+
+    return fig

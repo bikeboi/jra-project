@@ -13,34 +13,10 @@ import pynn_genn as sim
 import numpy as np
 
 
-# Get input samples
-def get_inputs(n_class, downscale=1):
-
-    # Get n_class character sets from the "Alphabet of the Magi" alphabet
-    data_dir = "omniglot/python/images_background"
-    dataset = Alphabet(data_dir, 0)
-    inputs = dataset[:n_class, :]
-
-    # Centering
-    # TODO: Write algorithm to center images
-
-    # Downsample
-    inputs = inputs[:, :, ::downscale, ::downscale]
-
-    # Invert
-    inputs = 1 - inputs
-
-    # Flatten
-    __, c, w, h = inputs.shape
-    inputs = inputs.reshape(-1, c, w * h)
-
-    return inputs
 
 
-def build_model(input_spikes, n_eKC, delta_t, neuron_params, syn_params, rng=None):
 
-    print("Building Model")
-
+def build_model(input_spikes, n_eKC, delta_t, neuron_params, syn_params, supervision=None, rng=None):
     # Derived parameters
     n_PN = len(input_spikes)
     n_iKC = n_PN * 10
@@ -70,7 +46,8 @@ def build_model(input_spikes, n_eKC, delta_t, neuron_params, syn_params, rng=Non
     )
 
     # Neuron type
-    tau_threshold = 120.0  # ms (tuned in ./lib/example.py)
+    tau_threshold = 120.0
+    # neuron = sim.IF_curr_exp(**neuron_params)
     neuron = IF_curr_exp_adapt(tau_threshold=tau_threshold, **neuron_params)
 
     # Populations
@@ -89,11 +66,18 @@ def build_model(input_spikes, n_eKC, delta_t, neuron_params, syn_params, rng=Non
         label="eKC"
     )
 
+    # Supervision
+    if supervision:
+        supervision(pop_eKC)
+
     # Projections
+    def n_conn(target): return int(syn_params['sparsity'] * len(target))
+
     # PN -> iKC
     proj_PN_iKC = sim.Projection(
         pop_PN, pop_iKC,
-        sim.FixedProbabilityConnector(0.05),  # conn_PN_iKC,
+        # sim.FixedProbabilityConnector(syn_params['sparsity']),  # conn_PN_iKC,
+        sim.FixedNumberPostConnector(n_conn(pop_iKC)),
         sim.StaticSynapse(weight=g_PN_iKC, delay=t_PN_iKC),
         label="PN_iKC"
     )
@@ -101,7 +85,8 @@ def build_model(input_spikes, n_eKC, delta_t, neuron_params, syn_params, rng=Non
     # iKC -> eKC
     proj_iKC_eKC = sim.Projection(
         pop_iKC, pop_eKC,
-        sim.FixedProbabilityConnector(0.05),  # conn_iKC_eKC,
+        # sim.FixedProbabilityConnector(syn_params['sparsity']),  # conn_iKC_eKC,
+        sim.FixedNumberPreConnector(n_conn(pop_iKC)),
         stdp,
         label="iKC_eKC"
     )
@@ -109,28 +94,30 @@ def build_model(input_spikes, n_eKC, delta_t, neuron_params, syn_params, rng=Non
     # Lateral connection matrix
     def lateral_conn_matrix(p): return 1 - np.identity(len(p))
 
-    ## sWTA (eKC)
+    # sWTA (eKC)
     proj_sWTA_eKC = sim.Projection(
         pop_eKC, pop_eKC,
-        sim.ArrayConnector(lateral_conn_matrix(pop_eKC)),
+        # sim.ArrayConnector(lateral_conn_matrix(pop_eKC)),
+        sim.AllToAllConnector(allow_self_connections=False),
         sim.StaticSynapse(weight=g_sWTA_eKC, delay=t_sWTA_eKC),
         receptor_type='inhibitory',
         label="sWTA_eKC"
     )
 
     # sWTA (iKC)
-    pop_iKC_inh = sim.Population(50, neuron, label="iKC_inh")
+    pop_iKC_inh = sim.Population(
+        int(len(pop_iKC) / 10), sim.IF_curr_exp(tau_m=delta_t, tau_syn_I=delta_t, tau_syn_E=delta_t), label="iKC_inh")
 
     proj_iKC_inh = sim.Projection(
         pop_iKC, pop_iKC_inh,
         sim.AllToAllConnector(),
-        sim.StaticSynapse(weight=g_sWTA_iKC, delay=delta_t),
+        sim.StaticSynapse(weight=1.0, delay=0.1),
         receptor_type='excitatory',
     )
 
     proj_sWTA_iKC = sim.Projection(
         pop_iKC_inh, pop_iKC,
-        sim.AllToAllConnector(),
+        sim.AllToAllConnector(allow_self_connections=False),
         sim.StaticSynapse(weight=g_sWTA_iKC, delay=t_sWTA_iKC),
         receptor_type='inhibitory',
         label="sWTA_iKC"
@@ -139,38 +126,33 @@ def build_model(input_spikes, n_eKC, delta_t, neuron_params, syn_params, rng=Non
     return MushroomBody(pop_PN, pop_iKC, pop_eKC, proj_PN_iKC, proj_iKC_eKC)
 
 
-def initialize_model(mb: MushroomBody, neuron_params, proj_params):
-    # Initialize neuron parameters
-    mb.pop["iKC"].set(**neuron_params)
-    mb.pop["eKC"].set(**neuron_params)
-
-    # Projections
-    # PN->iKC params
-    mb.proj['PN_iKC'].set(**proj_params['PN_iKC'])
-    mb.proj['iKC_eKC'].initialize(**proj_params['iKC_eKC'])
-
-
-def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_params={}, syn_params={}):
+def run(inputs, labels, supervision_setup=None, runs=1, spike_jitter=0, version=0, weight_log_freq=50, n_eKC=100,
+        verbosity=1, neuron_params={}, syn_params={}):
     # Simulation parameters
     delta_t = 0.1
     t_snapshot = 50
-    n_eKC = 500
 
     # Derive steps
-    steps = calculate_steps(inputs.shape[1], t_snapshot)
+    n_sample = len(inputs)
+    steps = calculate_steps(n_sample, t_snapshot)
 
     # Setup the experiment
-    print("Setting up")
     sim.setup(delta_t)
 
     # Input encoding
-    input_spikes, labels, samples = spike_encode(
-        inputs, t_snapshot, t_snapshot, spike_jitter=spike_jitter)
+    input_spikes = spike_encode(inputs, t_snapshot, spike_jitter=spike_jitter)
 
     # Build the model
     model = build_model(input_spikes, n_eKC, delta_t,
                         neuron_params, syn_params)
 
+    # Supervision
+    intervals = np.arange(0, n_sample * t_snapshot, t_snapshot)
+    if supervision_setup:
+        sup = supervision_setup(intervals, labels)
+        sup(model.pop["eKC"])
+
+    # Record variables
     model.record({
         "PN": ["spikes"],
         "iKC": ["spikes"],
@@ -178,11 +160,12 @@ def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_pa
     })
 
     # Log sim params to console
-    print(" -- steps:", steps)
-    for name in ["PN", "iKC", "eKC"]:
-        print(f" -- n_{name}: {len(model.pop[name])}")
+    if verbosity > 0:
+        print(" -- steps:", steps)
+        for name in ["PN", "iKC", "eKC"]:
+            print(f" -- n_{name}: {len(model.pop[name])}")
 
-    # Run
+    # Storing results
     results_path = f"results/two_class_{version}"
     # Clean out previous results
     shutil.rmtree(results_path, ignore_errors=True)
@@ -192,14 +175,13 @@ def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_pa
     io_iKC = PickleIO(filename=f"results/two_class_{version}/iKC.pickle")
     io_eKC = PickleIO(filename=f"results/two_class_{version}/eKC.pickle")
 
-    print("Initializing weight logger...")
     weight_logger = WeightLogger(
         model.proj['iKC_eKC'], weight_log_freq, f"results/two_class_{version}/weights.npy")
     progress_bar = ProgBar(steps)
 
-    print("Running simulation..\n")
+    # Per-run variables
     for __ in range(runs):
-        # initialize_model(model, neuron_params, syn_params)
+        # Run simulation
         sim.run(
             steps,
             callbacks=[
@@ -207,12 +189,10 @@ def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_pa
                 progress_bar
             ]
         )
+
+        # Logging
         weight_logger.reset()
         sim.reset()
-
-    print("\n\nDone")
-
-    print("Saving results...")
 
     model.pop["PN"].write_data(io_PN)
     model.pop["iKC"].write_data(io_iKC)
@@ -224,13 +204,11 @@ def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_pa
     sim_params = {
         "steps": steps,
         "t_snapshot": t_snapshot,
-        "intervals": np.arange(t_snapshot, inputs.shape[0]*inputs.shape[1]*t_snapshot, t_snapshot),
+        "intervals": np.arange(0, n_sample * t_snapshot, t_snapshot),
         "labels": labels,
-        "samples": samples
     }
 
     # Save params to disk
-    print("Saving simulation params...")
     np.savez(f"results/two_class_{version}/params", **sim_params)
 
     sim.end()
@@ -238,9 +216,11 @@ def run(inputs, runs=1, spike_jitter=0, version=0, weight_log_freq=50, neuron_pa
     return sim_params
 
 
+"""
 # Run the experment
 if __name__ == "__main__":
     args = [int(arg) for arg in sys.argv[1:]]
     version, n_class, downscale, jitter = args
-    inputs = get_inputs(n_class, downscale)
-    run(inputs, spike_jitter=jitter, version=version)
+    inputs, labels = get_inputs(n_class, downscale)
+    run(inputs, labels, spike_jitter=jitter, version=version)
+"""

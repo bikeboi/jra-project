@@ -1,47 +1,20 @@
 import numpy as np
 from pyNN.parameters import Sequence
+from skimage.filters import apply_hysteresis_threshold
 
-def spike_encode(inputs, t_snapshot=50, start_time=0, spike_jitter=0):
 
-    n_per_class = inputs.shape[1]
-    n_class = inputs.shape[0]
-    labels = np.concatenate([ np.full(n_per_class, c) for c in range(n_class) ], axis=0)
-    
-    # Randomly sample from input set
-    samples = np.concatenate(inputs, axis=0)
-    n_sample = len(samples)
-    ixs = np.arange(len(samples))
-    np.random.shuffle(ixs)
-    
-    samples = samples[ixs]
-    labels = labels[ixs]
+def spike_encode(inputs, labels, t_snapshot=50, offset=0, spike_jitter=0):
+    # Threshold inputs
+    samples = inputs.round()
 
-    # Binarize inputs
-    samples = samples.round()
-
-    # Filter out more than 10% spiking neurons
-    inv_k = int(inputs.shape[-1] * 0.95)
-    
     # Encode into spike snapshots
-    intervals = np.arange(start_time + 1, n_sample * t_snapshot, t_snapshot)
     snapshots = []
-    for i,pattern in zip(intervals, samples):
-        # Filter out >0.1 of active signals
-        inv_top_k = np.argsort(pattern)[:inv_k] # Bottom n-k pixels
-        pattern[inv_top_k] = 0.0
+    for bin_train in samples.T:
+        spikes = [(i * t_snapshot) + offset for i, x in enumerate(bin_train) if x > 0]
+        snapshots.append(spikes)
 
-        # Set spike time
-        masked = pattern * i
+    return snapshots
 
-        # Generate spike times from mask
-        snapshot = [ np.array([x - 1 + np.random.uniform(-spike_jitter,spike_jitter)]) if x != 0 else np.array([]) for x in masked ]
-        snapshots.append(snapshot)
-    
-    # Transpose and eliminate empty
-    snapshots = np.transpose(np.array(snapshots, dtype='object'))
-    snapshots = [Sequence([ s[0] for s in train if len(s) > 0 ]) for train in snapshots ]
-    
-    return snapshots, labels, samples
 
 """
 input_set = np.array([
@@ -49,7 +22,8 @@ input_set = np.array([
     [[0, 1], [0, 1]],
 ])
 
-enc, lab = spike_encode(input_set)
+enc, lab, __ = spike_encode(input_set)
+print(lab)
 for train in enc:
     print(train)
 """
