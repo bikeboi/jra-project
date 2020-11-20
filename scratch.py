@@ -1,5 +1,5 @@
 """
-Sandbox to test out random ideas
+Sandbox to test out ideas
 """
 
 import imageio
