@@ -6,4 +6,3 @@ each result file, `results/output_[N_CLASS].pickle`, named according to the numb
 of classes used for the task.
 
 ### Notebooks
-TODO
