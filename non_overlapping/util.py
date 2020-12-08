@@ -84,11 +84,10 @@ def encode_dataset(images, train_ratio, n_epoch, t_var=0, n_iter=3, sample_perio
     # Train-Test Split
     xs, ys = [], []
     (train, test), = StratifiedShuffleSplit(n_splits=1, train_size=train_ratio).split(samples, labels)
-    xs = np.concatenate([np.tile(samples[train], [n_epoch,1]),  # Repeat train data for n_epoch
+    xs = np.concatenate([np.tile(samples[train], [n_epoch, 1]),  # Repeat train data for n_epoch
                          samples[test]])
     ys = np.concatenate([np.tile(labels[train], n_epoch),
                          labels[test]])
-
 
     # Spike Encoding
     spike_ixs = []
@@ -101,7 +100,7 @@ def encode_dataset(images, train_ratio, n_epoch, t_var=0, n_iter=3, sample_perio
     spike_ixs = np.concatenate(spike_ixs).reshape(-1, 1)
     spike_ts = np.concatenate(spike_ts).reshape(-1, 1)
 
-    return np.concatenate([spike_ixs, spike_ts], axis=1), ys
+    return np.concatenate([spike_ixs, spike_ts], axis=1), ys, len(train) * n_epoch
 
 
 class ProgressBar(object):

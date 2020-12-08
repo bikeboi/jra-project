@@ -22,7 +22,7 @@ class STDPModel:
 
 
 # Models
-# 'Standard' STDP
+# Standard STDP
 standard_stdp = STDPModel(
     """
     dapre/dt = apre/taupre
@@ -41,24 +41,29 @@ gary_stdp = STDPModel(
     g : 1
     tpre : second
     tpost : second
-    aplus : 1
-    aminus : 1
-    tplus : second
-    tminus : second
-    gmin : 1
-    gmax : 1
+    aplus : 1 (shared)
+    aminus : 1 (shared)
+    tplus : second (shared)
+    tminus : second (shared)
+    gmin : 1 (shared)
+    gmax : 1 (shared)
+    tmax : second  (shared) # When to stop the learning rule
     """,
 
     # Update pre-synaptic spike time and update weight
     on_pre="""
     v += g*mV
     tpre = t
-    g = clip(g + aplus*int(abs(tpost - tpre) <= tplus) - aminus*int(abs(tpost-tpre) > tplus and abs(tpost-tpre) <= tminus), gmin, gmax)
+    training = int((t < tmax) or (tmax < 0*ms))
+    dg = training * (aplus*int(abs(tpost - tpre) <= tplus) - aminus*int(abs(tpost-tpre) > tplus and abs(tpost-tpre) <= tminus))
+    g = clip(g + dg, gmin, gmax)
     """,
 
     # Update post-synaptic spike time and update weight
     on_post="""
     tpost = t
-    g = clip(g + aplus*int(abs(tpost - tpre) <= tplus) - aminus*int(abs(tpost-tpre) > tplus and abs(tpost-tpre) <= tminus), gmin, gmax)
+    training = int((t < tmax) or (tmax < 0*ms))
+    dg = training * (aplus*int(abs(tpost - tpre) <= tplus) - aminus*int(abs(tpost-tpre) > tplus and abs(tpost-tpre) <= tminus))
+    g = clip(g + dg, gmin, gmax)
     """,
 )
